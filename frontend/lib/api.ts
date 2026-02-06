@@ -72,7 +72,21 @@ export type RetryMetrics = {
   due: number;
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+function normalizeApiBase(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed.replace(/\/+$/, '');
+  return `https://${trimmed.replace(/^\/+/, '').replace(/\/+$/, '')}`;
+}
+
+const API_BASE = normalizeApiBase(
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:8000')
+);
+
+function apiUrl(path: string): string {
+  if (!API_BASE) return path;
+  return `${API_BASE}${path}`;
+}
 
 export async function fetchNews(params: {
   lang: Lang;
@@ -99,19 +113,23 @@ export async function fetchNews(params: {
     qp.set('topic', params.topic.trim());
   }
 
-  const resp = await fetch(`${API_BASE}/api/news?${qp.toString()}`, { next: { revalidate: 0 } });
+  const resp = await fetch(apiUrl(`/api/news?${qp.toString()}`), { next: { revalidate: 0 } });
   if (!resp.ok) {
     throw new Error(`Failed to fetch news: ${resp.status}`);
   }
   const data = await resp.json();
   return {
     total: Number(data.total ?? 0),
-    items: Array.isArray(data.items) ? data.items.map((item: RawNewsItem) => normalizeNewsItem(item)) : [],
+    items: Array.isArray(data.items)
+      ? data.items
+          .filter((item: unknown): item is RawNewsItem => Boolean(item) && typeof item === 'object')
+          .map((item: RawNewsItem) => normalizeNewsItem(item))
+      : [],
   };
 }
 
 export async function fetchNewsDetail(id: string, lang: Lang): Promise<NewsItem> {
-  const resp = await fetch(`${API_BASE}/api/news/${id}?lang=${lang}`, { next: { revalidate: 0 } });
+  const resp = await fetch(apiUrl(`/api/news/${id}?lang=${lang}`), { next: { revalidate: 0 } });
   if (!resp.ok) {
     throw new Error(`Failed to fetch detail: ${resp.status}`);
   }
@@ -120,7 +138,7 @@ export async function fetchNewsDetail(id: string, lang: Lang): Promise<NewsItem>
 }
 
 export async function fetchSourceHealth(): Promise<SourceHealth[]> {
-  const resp = await fetch(`${API_BASE}/api/sources/health`, { next: { revalidate: 0 } });
+  const resp = await fetch(apiUrl('/api/sources/health'), { next: { revalidate: 0 } });
   if (!resp.ok) {
     throw new Error(`Failed to fetch source health: ${resp.status}`);
   }
@@ -129,7 +147,7 @@ export async function fetchSourceHealth(): Promise<SourceHealth[]> {
 }
 
 export async function fetchFilterOptions(): Promise<FilterOptions> {
-  const resp = await fetch(`${API_BASE}/api/filters`, { next: { revalidate: 60 } });
+  const resp = await fetch(apiUrl('/api/filters'), { next: { revalidate: 60 } });
   if (!resp.ok) {
     throw new Error(`Failed to fetch filters: ${resp.status}`);
   }
@@ -137,13 +155,23 @@ export async function fetchFilterOptions(): Promise<FilterOptions> {
 }
 
 export async function fetchRetryMetrics(): Promise<RetryMetrics> {
-  const resp = await fetch(`${API_BASE}/api/retry/metrics`, { next: { revalidate: 0 } });
+  const resp = await fetch(apiUrl('/api/retry/metrics'), { next: { revalidate: 0 } });
   if (!resp.ok) {
     throw new Error(`Failed to fetch retry metrics: ${resp.status}`);
   }
   return resp.json();
 }
 
-export function getWsUrl(): string {
-  return API_BASE.replace('http://', 'ws://').replace('https://', 'wss://') + '/ws/news';
+export function getWsUrl(): string | null {
+  if (!API_BASE) return null;
+  try {
+    const url = new URL(API_BASE);
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    url.pathname = '/ws/news';
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  } catch {
+    return null;
+  }
 }

@@ -105,7 +105,20 @@ export function NewsFeed({ initialLang, initialChinaOnly, initialQ, initialCount
   }, [lang, chinaOnly, keyword, country, topic, router]);
 
   useEffect(() => {
-    const ws = new WebSocket(getWsUrl());
+    const wsUrl = getWsUrl();
+    if (!wsUrl) return;
+
+    if (typeof window !== 'undefined' && window.location.protocol === 'https:' && wsUrl.startsWith('ws://')) {
+      return;
+    }
+
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch {
+      return;
+    }
+
     ws.onmessage = () => void loadCurrent({ lang, chinaOnly, keyword, country, topic });
 
     const heartbeat = setInterval(() => {
