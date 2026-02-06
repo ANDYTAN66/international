@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import settings
-from .database import SessionLocal, get_db, init_db
+from .database import SessionLocal, get_db, init_db, wait_for_db_ready
 from .news_service import (
     ingest_news_batch,
     query_filter_options,
@@ -30,6 +30,7 @@ async def scheduled_ingest() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    await wait_for_db_ready()
     await init_db()
     scheduler.add_job(scheduled_ingest, 'interval', seconds=settings.poll_seconds, max_instances=1, coalesce=True)
     scheduler.start()

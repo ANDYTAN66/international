@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     retry_queue_batch_size: int = 20
     retry_max_attempts: int = 5
     retry_initial_delay_seconds: int = 120
+    startup_db_max_retries: int = 20
+    startup_db_retry_seconds: float = 3.0
     user_agent: str = (
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
         'AppleWebKit/537.36 (KHTML, like Gecko) '
