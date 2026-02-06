@@ -11,7 +11,8 @@ class Settings(BaseSettings):
     poll_seconds: int = 60
 
     request_timeout_seconds: int = 20
-    max_articles_per_source: int = 30
+    max_articles_per_source: int = 10
+    ingest_max_items_per_cycle: int = 25
     feed_max_retries: int = 2
     feed_retry_backoff_seconds: float = 1.5
     retry_queue_batch_size: int = 20

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 
@@ -93,13 +94,19 @@ async def _ingest_one_item(db: AsyncSession, item: dict) -> int:
     if await db.scalar(exists_stmt):
         return 0
 
-    content_en = await extract_article_text(normalized_url)
+    try:
+        content_en = await asyncio.wait_for(extract_article_text(normalized_url), timeout=20)
+    except Exception:
+        content_en = ''
     extraction_failed = False
     if not content_en:
         extraction_failed = True
         content_en = item['summary'] or ''
 
-    content_zh = await translate_en_to_zh(content_en)
+    try:
+        content_zh = await asyncio.wait_for(translate_en_to_zh(content_en), timeout=20)
+    except Exception:
+        content_zh = None
     countries, topics = extract_country_topic_tags(item['title'], item['summary'], content_en)
     china_related = 'china' in countries or is_china_related(item['title'], item['summary'], content_en)
 
@@ -225,10 +232,11 @@ async def ingest_news_batch(db: AsyncSession) -> int:
     inserted_total += retry_inserted
 
     source_results = await fetch_all_feeds_with_health()
+    collected_items: list[dict] = []
     for result in source_results:
         await _update_source_health(db, result)
         if result.success:
-            inserted_total += await _ingest_items(db, result.items)
+            collected_items.extend(result.items)
             continue
 
         await _enqueue_failure(
@@ -239,6 +247,21 @@ async def ingest_news_batch(db: AsyncSession) -> int:
             payload={'feed_url': result.source.feed_url},
             error=result.error or 'source fetch failed',
         )
+
+    # Keep each cycle bounded so API responsiveness is not affected.
+    seen_urls: set[str] = set()
+    deduped: list[dict] = []
+    for item in sorted(collected_items, key=lambda x: x.get('published_at', _utcnow()), reverse=True):
+        url = strip_tracking_params(item.get('article_url', ''))
+        if not url or url in seen_urls:
+            continue
+        seen_urls.add(url)
+        deduped.append(item)
+        if len(deduped) >= settings.ingest_max_items_per_cycle:
+            break
+
+    if deduped:
+        inserted_total += await _ingest_items(db, deduped)
 
     await db.commit()
     if inserted_total:

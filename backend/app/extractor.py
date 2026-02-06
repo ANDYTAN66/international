@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import aiohttp
 import trafilatura
 
@@ -40,7 +42,8 @@ async def extract_article_text(url: str) -> str:
     if not html:
         return ''
 
-    text = extract_text_from_html(html)
+    # HTML parsing can be CPU-heavy; keep it off the event loop.
+    text = await asyncio.to_thread(extract_text_from_html, html)
     if not text:
         return ''
 
