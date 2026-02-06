@@ -73,10 +73,19 @@ export type RetryMetrics = {
 };
 
 function normalizeApiBase(raw: string): string {
-  const trimmed = raw.trim();
+  const trimmed = raw.trim().replace(/[<>]/g, '');
   if (!trimmed) return '';
-  if (/^https?:\/\//i.test(trimmed)) return trimmed.replace(/\/+$/, '');
-  return `https://${trimmed.replace(/^\/+/, '').replace(/\/+$/, '')}`;
+  const normalized = /^https?:\/\//i.test(trimmed)
+    ? trimmed.replace(/\/+$/, '')
+    : `https://${trimmed.replace(/^\/+/, '').replace(/\/+$/, '')}`;
+  try {
+    const host = new URL(normalized).hostname.toLowerCase();
+    // Railway internal domains are private and not reachable from browser clients.
+    if (host.endsWith('.railway.internal')) return '';
+  } catch {
+    return '';
+  }
+  return normalized;
 }
 
 const API_BASE = normalizeApiBase(
