@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -21,11 +23,15 @@ from .realtime import ws_manager
 from .schemas import NewsItem, NewsListResponse, RetryMetrics, SourceHealthItem, SourceHealthResponse
 
 scheduler = AsyncIOScheduler()
+logger = logging.getLogger(__name__)
 
 
 async def scheduled_ingest() -> None:
-    async with SessionLocal() as db:
-        await ingest_news_batch(db)
+    try:
+        async with SessionLocal() as db:
+            await ingest_news_batch(db)
+    except Exception:
+        logger.exception('scheduled ingest failed')
 
 
 @asynccontextmanager
@@ -35,12 +41,13 @@ async def lifespan(_: FastAPI):
     scheduler.add_job(scheduled_ingest, 'interval', seconds=settings.poll_seconds, max_instances=1, coalesce=True)
     scheduler.start()
 
-    # Prime the site with immediate data on startup.
-    await scheduled_ingest()
+    # Prime first fetch in background so API becomes available immediately.
+    kickoff_task = asyncio.create_task(scheduled_ingest())
 
     try:
         yield
     finally:
+        kickoff_task.cancel()
         scheduler.shutdown()
 
 
