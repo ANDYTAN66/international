@@ -34,21 +34,41 @@ async def scheduled_ingest() -> None:
         logger.exception('scheduled ingest failed')
 
 
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    await wait_for_db_ready()
-    await init_db()
-    scheduler.add_job(scheduled_ingest, 'interval', seconds=settings.poll_seconds, max_instances=1, coalesce=True)
-    scheduler.start()
+async def startup_db_worker(app: FastAPI) -> None:
+    while True:
+        try:
+            await wait_for_db_ready()
+            await init_db()
+            app.state.db_ready = True
+            if not scheduler.running:
+                scheduler.add_job(
+                    scheduled_ingest,
+                    'interval',
+                    seconds=settings.poll_seconds,
+                    max_instances=1,
+                    coalesce=True,
+                )
+                scheduler.start()
+            asyncio.create_task(scheduled_ingest())
+            logger.info('database initialized and scheduler started')
+            return
+        except Exception:
+            app.state.db_ready = False
+            logger.exception('database init failed, retrying in 5s')
+            await asyncio.sleep(5)
 
-    # Prime first fetch in background so API becomes available immediately.
-    kickoff_task = asyncio.create_task(scheduled_ingest())
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.state.db_ready = False
+    startup_task = asyncio.create_task(startup_db_worker(app))
 
     try:
         yield
     finally:
-        kickoff_task.cancel()
-        scheduler.shutdown()
+        startup_task.cancel()
+        if scheduler.running:
+            scheduler.shutdown()
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
@@ -69,7 +89,7 @@ async def root() -> dict:
 
 @app.get('/health')
 async def health() -> dict:
-    return {'status': 'ok'}
+    return {'status': 'ok', 'db_ready': bool(getattr(app.state, 'db_ready', False))}
 
 
 @app.get(f'{settings.api_prefix}/news', response_model=NewsListResponse)
@@ -83,6 +103,9 @@ async def list_news(
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
 ) -> NewsListResponse:
+    if not getattr(app.state, 'db_ready', False):
+        return NewsListResponse(total=0, items=[])
+
     total, items = await query_news(
         db,
         lang=lang,
@@ -102,6 +125,9 @@ async def get_news_detail(
     lang: str = Query(default='en', pattern='^(en|zh)$'),
     db: AsyncSession = Depends(get_db),
 ) -> NewsItem:
+    if not getattr(app.state, 'db_ready', False):
+        raise HTTPException(status_code=503, detail='Database initializing')
+
     item = await query_news_detail(db, article_id=article_id, lang=lang)
     if not item:
         raise HTTPException(status_code=404, detail='News not found')
@@ -110,6 +136,9 @@ async def get_news_detail(
 
 @app.get(f'{settings.api_prefix}/sources/health', response_model=SourceHealthResponse)
 async def get_sources_health(db: AsyncSession = Depends(get_db)) -> SourceHealthResponse:
+    if not getattr(app.state, 'db_ready', False):
+        return SourceHealthResponse(items=[])
+
     items = await query_source_health(db)
     return SourceHealthResponse(items=[SourceHealthItem(**item) for item in items])
 
@@ -121,6 +150,9 @@ async def get_filters() -> dict[str, list[str]]:
 
 @app.get(f'{settings.api_prefix}/retry/metrics', response_model=RetryMetrics)
 async def get_retry_queue_metrics(db: AsyncSession = Depends(get_db)) -> RetryMetrics:
+    if not getattr(app.state, 'db_ready', False):
+        return RetryMetrics(pending=0, due=0)
+
     metrics = await query_retry_metrics(db)
     return RetryMetrics(**metrics)
 
