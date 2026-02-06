@@ -95,7 +95,10 @@ async def _ingest_one_item(db: AsyncSession, item: dict) -> int:
         return 0
 
     try:
-        content_en = await asyncio.wait_for(extract_article_text(normalized_url), timeout=20)
+        content_en = await asyncio.wait_for(
+            extract_article_text(normalized_url),
+            timeout=max(1, settings.article_extract_timeout_seconds),
+        )
     except Exception:
         content_en = ''
     extraction_failed = False
@@ -104,7 +107,10 @@ async def _ingest_one_item(db: AsyncSession, item: dict) -> int:
         content_en = item['summary'] or ''
 
     try:
-        content_zh = await asyncio.wait_for(translate_en_to_zh(content_en), timeout=20)
+        content_zh = await asyncio.wait_for(
+            translate_en_to_zh(content_en),
+            timeout=max(1, settings.translation_timeout_seconds),
+        )
     except Exception:
         content_zh = None
     countries, topics = extract_country_topic_tags(item['title'], item['summary'], content_en)
@@ -142,8 +148,11 @@ async def _ingest_one_item(db: AsyncSession, item: dict) -> int:
 
 async def _ingest_items(db: AsyncSession, items: list[dict]) -> int:
     inserted = 0
-    for item in items:
+    batch_size = max(1, settings.ingest_commit_batch_size)
+    for idx, item in enumerate(items, start=1):
         inserted += await _ingest_one_item(db, item)
+        if idx % batch_size == 0:
+            await db.commit()
     return inserted
 
 

@@ -12,7 +12,10 @@ class Settings(BaseSettings):
 
     request_timeout_seconds: int = 20
     max_articles_per_source: int = 10
-    ingest_max_items_per_cycle: int = 25
+    ingest_max_items_per_cycle: int = 8
+    article_extract_timeout_seconds: int = 6
+    translation_timeout_seconds: int = 4
+    ingest_commit_batch_size: int = 4
     feed_max_retries: int = 2
     feed_retry_backoff_seconds: float = 1.5
     retry_queue_batch_size: int = 20
