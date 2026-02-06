@@ -47,12 +47,12 @@ export function NewsCard({ item, lang }: { item: NewsItem; lang: Lang }) {
       <p className="mt-3 max-h-24 overflow-hidden text-sm text-slate-200">{item.summary || item.content}</p>
 
       <div className="mt-3 flex flex-wrap gap-2">
-        {item.country_tags.slice(0, 2).map((tag) => (
+        {(item.country_tags ?? []).slice(0, 2).map((tag) => (
           <span key={tag} className="rounded-full border border-mint/50 bg-mint/10 px-2 py-0.5 text-xs text-mint">
             {prettifyTag(tag)}
           </span>
         ))}
-        {item.topic_tags.slice(0, 2).map((tag) => (
+        {(item.topic_tags ?? []).slice(0, 2).map((tag) => (
           <span key={tag} className="rounded-full border border-accent/50 bg-accent/10 px-2 py-0.5 text-xs text-accent">
             {prettifyTag(tag)}
           </span>

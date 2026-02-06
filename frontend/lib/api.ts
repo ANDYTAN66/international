@@ -22,6 +22,30 @@ type NewsListResponse = {
   items: NewsItem[];
 };
 
+type RawNewsItem = Partial<NewsItem> & {
+  id: number;
+  title: string;
+};
+
+function normalizeNewsItem(raw: RawNewsItem): NewsItem {
+  return {
+    id: raw.id,
+    source_name: raw.source_name ?? 'Unknown Source',
+    source_url: raw.source_url ?? '',
+    article_url: raw.article_url ?? '',
+    title: raw.title ?? '',
+    summary: raw.summary ?? '',
+    content: raw.content ?? '',
+    language: raw.language === 'zh' ? 'zh' : 'en',
+    published_at: raw.published_at ?? new Date().toISOString(),
+    fetched_at: raw.fetched_at ?? new Date().toISOString(),
+    china_related: Boolean(raw.china_related),
+    image_url: raw.image_url ?? null,
+    country_tags: Array.isArray(raw.country_tags) ? raw.country_tags : [],
+    topic_tags: Array.isArray(raw.topic_tags) ? raw.topic_tags : [],
+  };
+}
+
 export type SourceHealth = {
   source_name: string;
   feed_url: string;
@@ -79,7 +103,11 @@ export async function fetchNews(params: {
   if (!resp.ok) {
     throw new Error(`Failed to fetch news: ${resp.status}`);
   }
-  return resp.json();
+  const data = await resp.json();
+  return {
+    total: Number(data.total ?? 0),
+    items: Array.isArray(data.items) ? data.items.map((item: RawNewsItem) => normalizeNewsItem(item)) : [],
+  };
 }
 
 export async function fetchNewsDetail(id: string, lang: Lang): Promise<NewsItem> {
@@ -87,7 +115,8 @@ export async function fetchNewsDetail(id: string, lang: Lang): Promise<NewsItem>
   if (!resp.ok) {
     throw new Error(`Failed to fetch detail: ${resp.status}`);
   }
-  return resp.json();
+  const data: RawNewsItem = await resp.json();
+  return normalizeNewsItem(data);
 }
 
 export async function fetchSourceHealth(): Promise<SourceHealth[]> {

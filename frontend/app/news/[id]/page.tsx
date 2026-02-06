@@ -65,12 +65,12 @@ export default async function NewsDetailPage({
             {lang === 'zh' ? zhOpenSource : 'Open original source'}
           </a>
           <div className="mt-3 flex flex-wrap gap-2">
-            {item.country_tags.map((tag) => (
+            {(item.country_tags ?? []).map((tag) => (
               <span key={tag} className="rounded-full border border-mint/50 bg-mint/10 px-2 py-0.5 text-xs text-mint">
                 {pretty(tag)}
               </span>
             ))}
-            {item.topic_tags.map((tag) => (
+            {(item.topic_tags ?? []).map((tag) => (
               <span key={tag} className="rounded-full border border-accent/50 bg-accent/10 px-2 py-0.5 text-xs text-accent">
                 {pretty(tag)}
               </span>
