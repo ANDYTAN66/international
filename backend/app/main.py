@@ -106,17 +106,21 @@ async def list_news(
     if not getattr(app.state, 'db_ready', False):
         return NewsListResponse(total=0, items=[])
 
-    total, items = await query_news(
-        db,
-        lang=lang,
-        china_only=china_only,
-        q=q,
-        country=country,
-        topic=topic,
-        limit=limit,
-        offset=offset,
-    )
-    return NewsListResponse(total=total, items=[NewsItem(**item) for item in items])
+    try:
+        total, items = await query_news(
+            db,
+            lang=lang,
+            china_only=china_only,
+            q=q,
+            country=country,
+            topic=topic,
+            limit=limit,
+            offset=offset,
+        )
+        return NewsListResponse(total=total, items=[NewsItem(**item) for item in items])
+    except Exception:
+        logger.exception('list_news failed')
+        return NewsListResponse(total=0, items=[])
 
 
 @app.get(f'{settings.api_prefix}/news/{{article_id}}', response_model=NewsItem)
@@ -139,13 +143,21 @@ async def get_sources_health(db: AsyncSession = Depends(get_db)) -> SourceHealth
     if not getattr(app.state, 'db_ready', False):
         return SourceHealthResponse(items=[])
 
-    items = await query_source_health(db)
-    return SourceHealthResponse(items=[SourceHealthItem(**item) for item in items])
+    try:
+        items = await query_source_health(db)
+        return SourceHealthResponse(items=[SourceHealthItem(**item) for item in items])
+    except Exception:
+        logger.exception('get_sources_health failed')
+        return SourceHealthResponse(items=[])
 
 
 @app.get(f'{settings.api_prefix}/filters')
 async def get_filters() -> dict[str, list[str]]:
-    return await query_filter_options()
+    try:
+        return await query_filter_options()
+    except Exception:
+        logger.exception('get_filters failed')
+        return {'countries': [], 'topics': []}
 
 
 @app.get(f'{settings.api_prefix}/retry/metrics', response_model=RetryMetrics)
@@ -153,8 +165,12 @@ async def get_retry_queue_metrics(db: AsyncSession = Depends(get_db)) -> RetryMe
     if not getattr(app.state, 'db_ready', False):
         return RetryMetrics(pending=0, due=0)
 
-    metrics = await query_retry_metrics(db)
-    return RetryMetrics(**metrics)
+    try:
+        metrics = await query_retry_metrics(db)
+        return RetryMetrics(**metrics)
+    except Exception:
+        logger.exception('get_retry_queue_metrics failed')
+        return RetryMetrics(pending=0, due=0)
 
 
 @app.websocket('/ws/news')

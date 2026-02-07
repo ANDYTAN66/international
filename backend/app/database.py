@@ -37,6 +37,14 @@ SessionLocal = async_sessionmaker(bind=engine, expire_on_commit=False, class_=As
 async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Backward-compatible schema patching for pre-existing deployments
+        # without migration tooling.
+        await conn.execute(
+            text("ALTER TABLE news_articles ADD COLUMN IF NOT EXISTS country_tags_blob VARCHAR(1024) NOT NULL DEFAULT '|'")
+        )
+        await conn.execute(
+            text("ALTER TABLE news_articles ADD COLUMN IF NOT EXISTS topic_tags_blob VARCHAR(1024) NOT NULL DEFAULT '|'")
+        )
 
 
 async def wait_for_db_ready() -> None:
