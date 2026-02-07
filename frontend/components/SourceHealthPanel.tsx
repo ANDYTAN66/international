@@ -38,6 +38,7 @@ export function SourceHealthPanel({
       latency: '\u5ef6\u8fdf',
       failures: '\u8fde\u7eed\u5931\u8d25',
       error: '\u9519\u8bef',
+      empty: '\u6682\u65e0\u6765\u6e90\u5065\u5eb7\u6570\u636e\uff0c\u53ef\u80fd\u4ecd\u5728\u521d\u59cb\u5316\u6216\u6293\u53d6\u4e2d\u3002',
     },
     en: {
       title: 'Source Health Monitor',
@@ -49,6 +50,7 @@ export function SourceHealthPanel({
       latency: 'Latency',
       failures: 'Consecutive Failures',
       error: 'Error',
+      empty: 'No source health data yet. Backend may still be initializing or ingesting.',
     },
   }[lang];
 
@@ -70,6 +72,7 @@ export function SourceHealthPanel({
           </span>
         </div>
       ) : null}
+      {items.length === 0 ? <p className="mb-3 text-xs text-slate-300">{text.empty}</p> : null}
       <div className="grid gap-3 md:grid-cols-2">
         {items.map((item) => (
           <article key={item.source_name} className="rounded-xl border border-slate-600/35 bg-slate-900/35 p-4">

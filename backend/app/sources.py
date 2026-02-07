@@ -32,11 +32,13 @@ SOURCES: list[SourceConfig] = [
     SourceConfig(name='Google News - World', feed_url='https://news.google.com/rss/headlines/section/topic/WORLD?hl=en-US&gl=US&ceid=US:en'),
     SourceConfig(name='Google News - China', feed_url='https://news.google.com/rss/search?q=China&hl=en-US&gl=US&ceid=US:en'),
     SourceConfig(name='CNN World', feed_url='http://rss.cnn.com/rss/edition_world.rss'),
-    SourceConfig(name='CNN Top Stories', feed_url='http://rss.cnn.com/rss/edition.rss'),
-    SourceConfig(name='Reuters World (Agency)', feed_url='https://www.reutersagency.com/feed/?best-topics=world&post_type=best'),
     SourceConfig(name='Reuters China (Search)', feed_url='https://www.reuters.com/world/china/rss'),
-    SourceConfig(name='BBC World', feed_url='http://feeds.bbci.co.uk/news/world/rss.xml'),
-    SourceConfig(name='AP Top News', feed_url='https://feeds.apnews.com/apf-topnews'),
+    SourceConfig(name='Sky News World', feed_url='https://feeds.skynews.com/feeds/rss/world.xml'),
+    SourceConfig(name='France24 World', feed_url='https://www.france24.com/en/rss'),
+    SourceConfig(name='NPR World', feed_url='https://www.npr.org/rss/rss.php?id=1004'),
+    SourceConfig(name='CNBC International', feed_url='https://www.cnbc.com/id/100727362/device/rss/rss.html'),
+    SourceConfig(name='CNBC Asia', feed_url='https://www.cnbc.com/id/19832390/device/rss/rss.html'),
+    SourceConfig(name='China Daily China', feed_url='https://www.chinadaily.com.cn/rss/china_rss.xml'),
 ]
 
 
@@ -111,7 +113,8 @@ async def fetch_feed_with_retry(
                 error=None,
             )
         except Exception as exc:
-            last_error = str(exc)
+            text = str(exc).strip()
+            last_error = text if text else type(exc).__name__
             last_latency_ms = int((perf_counter() - started) * 1000)
             if attempt < attempts_allowed:
                 await asyncio.sleep(backoff * (2 ** (attempt - 1)))
@@ -147,6 +150,8 @@ async def fetch_all_feeds_with_health() -> list[SourceFetchResult]:
     for idx, result in enumerate(results):
         if isinstance(result, Exception):
             src = SOURCES[idx]
+            text = str(result).strip()
+            message = text if text else type(result).__name__
             parsed.append(
                 SourceFetchResult(
                     source=src,
@@ -154,7 +159,7 @@ async def fetch_all_feeds_with_health() -> list[SourceFetchResult]:
                     attempts=settings.feed_max_retries,
                     latency_ms=None,
                     items=[],
-                    error=str(result),
+                    error=message,
                 )
             )
             continue

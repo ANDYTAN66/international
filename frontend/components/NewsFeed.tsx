@@ -60,7 +60,7 @@ export function NewsFeed({ initialLang, initialChinaOnly, initialQ, initialCount
   }) {
     try {
       setErr(null);
-      const [newsResp, healthResp, retryResp] = await Promise.all([
+      const [newsResp, healthResp, retryResp] = await Promise.allSettled([
         fetchNews({
           lang: current.lang,
           chinaOnly: current.chinaOnly,
@@ -71,11 +71,24 @@ export function NewsFeed({ initialLang, initialChinaOnly, initialQ, initialCount
         fetchSourceHealth(),
         fetchRetryMetrics(),
       ]);
-      setNews(newsResp.items);
-      setHealth(healthResp);
-      setRetryMetrics(retryResp);
-    } catch (error) {
-      setErr(error instanceof Error ? error.message : 'Unknown error');
+      if (newsResp.status === 'fulfilled') {
+        setNews(newsResp.value.items);
+      } else {
+        setNews([]);
+        setErr(newsResp.reason instanceof Error ? newsResp.reason.message : 'Failed to fetch news');
+      }
+
+      if (healthResp.status === 'fulfilled') {
+        setHealth(healthResp.value);
+      } else {
+        setHealth([]);
+      }
+
+      if (retryResp.status === 'fulfilled') {
+        setRetryMetrics(retryResp.value);
+      } else {
+        setRetryMetrics({ pending: 0, due: 0 });
+      }
     } finally {
       setLoading(false);
     }
@@ -144,6 +157,8 @@ export function NewsFeed({ initialLang, initialChinaOnly, initialQ, initialCount
       reset: '\u91cd\u7f6e\u7b5b\u9009',
       chinaSection: '\u4e2d\u56fd\u76f8\u5173\u4e13\u680f',
       latest: '\u6700\u65b0\u56fd\u9645\u8d44\u8baf',
+      noChina: '\u6682\u65e0\u4e2d\u56fd\u76f8\u5173\u65b0\u95fb\uff0c\u6b63\u5728\u7ee7\u7eed\u6293\u53d6\u3002',
+      noNews: '\u6682\u65e0\u65b0\u95fb\u53ef\u663e\u793a\uff0c\u8bf7\u7a0d\u540e\u5237\u65b0\u3002',
     },
     en: {
       desc: 'Realtime international aggregation with source transparency, full-text reading, and advanced filters.',
@@ -155,6 +170,8 @@ export function NewsFeed({ initialLang, initialChinaOnly, initialQ, initialCount
       reset: 'Reset Filters',
       chinaSection: 'China Focus',
       latest: 'Latest International Headlines',
+      noChina: 'No China-related items yet. Ingestion is still running.',
+      noNews: 'No stories yet. Please refresh shortly.',
     },
   }[lang];
 
@@ -255,6 +272,7 @@ export function NewsFeed({ initialLang, initialChinaOnly, initialQ, initialCount
               <NewsCard key={`china-${item.id}`} item={item} lang={lang} />
             ))}
           </div>
+          {!loading && chinaItems.length === 0 ? <p className="mt-3 text-sm text-slate-300">{i18n.noChina}</p> : null}
         </div>
 
         <div>
@@ -262,6 +280,7 @@ export function NewsFeed({ initialLang, initialChinaOnly, initialQ, initialCount
             {i18n.latest}
           </h2>
           {loading ? <p className="text-sm text-slate-300">Loading...</p> : null}
+          {!loading && news.length === 0 && !err ? <p className="mb-3 text-sm text-slate-300">{i18n.noNews}</p> : null}
           <div className="grid gap-4 md:grid-cols-2">
             {news.map((item) => (
               <NewsCard key={item.id} item={item} lang={lang} />

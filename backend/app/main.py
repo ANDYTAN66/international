@@ -40,6 +40,7 @@ async def startup_db_worker(app: FastAPI) -> None:
             await wait_for_db_ready()
             await init_db()
             app.state.db_ready = True
+            app.state.last_db_error = None
             if not scheduler.running:
                 scheduler.add_job(
                     scheduled_ingest,
@@ -54,6 +55,7 @@ async def startup_db_worker(app: FastAPI) -> None:
             return
         except Exception:
             app.state.db_ready = False
+            app.state.last_db_error = 'database init/connect failed'
             logger.exception('database init failed, retrying in 5s')
             await asyncio.sleep(5)
 
@@ -61,6 +63,7 @@ async def startup_db_worker(app: FastAPI) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.db_ready = False
+    app.state.last_db_error = None
     startup_task = asyncio.create_task(startup_db_worker(app))
 
     try:
@@ -89,7 +92,12 @@ async def root() -> dict:
 
 @app.get('/health')
 async def health() -> dict:
-    return {'status': 'ok', 'db_ready': bool(getattr(app.state, 'db_ready', False))}
+    return {
+        'status': 'ok',
+        'db_ready': bool(getattr(app.state, 'db_ready', False)),
+        'scheduler_running': bool(scheduler.running),
+        'last_db_error': getattr(app.state, 'last_db_error', None),
+    }
 
 
 @app.get(f'{settings.api_prefix}/news', response_model=NewsListResponse)
